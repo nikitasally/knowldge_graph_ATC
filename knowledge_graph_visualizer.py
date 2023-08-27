@@ -99,7 +99,7 @@ html_code = '''
 </head>
 <body>
     <h1>Neo4j Flight Explorer</h1>
-    <form action="/search" method="post">
+    <form action="/query" method="post">
         <label for="query">Enter your Cypher query:</label>
         <input type="text" id="query" name="query" required>
         <input type="submit" value="Execute Query">
@@ -107,23 +107,11 @@ html_code = '''
     {% if results %}
     <h2>Query: {{ query }}</h2>
     {% for result in results %}
-    {% if result['flight_number'] %}
     <div class="card">
-        <h4>Flight: {{ result['flight_number'] }}</h4>
-        <p>Date: {{ result['date'] or '-' }}</p>
-        <p>Time: {{ result['time'] or '-' }}</p>
-        <p>Status: {{ result['status'] or '-' }}</p>
-        <p>Prod. Line: {{ result['production_line'] or '-' }}</p>
-        <p>Reg. No.: {{ result['registration_number'] or '-' }}</p>
-        {% if result['departure_airport'] %}<p>Dep.: {{ result['departure_airport'] }}</p>{% endif %}
-        {% if result['arrival_airport'] %}<p>Arr.: {{ result['arrival_airport'] }}</p>{% endif %}
-        {% if result['airline'] %}<p>Airline: {{ result['airline'] }}</p>{% endif %}
-        <p>Model: {{ result['model_code'] or '-' }}</p>
-        <p>First Flight: {{ result['first_flight_date'] or '-' }}</p>
-        <p>Owner: {{ result['plane_owner'] or '-' }}</p>
-        <p>Age: {{ result['plane_age'] or '-' }} yrs</p>
+        {% for key, value in result.items() %}
+        <p><strong>{{ key }}:</strong> {{ value }}</p>
+        {% endfor %}
     </div>
-    {% endif %}
     {% endfor %}
     {% endif %}
 </body>
@@ -134,9 +122,54 @@ html_code = '''
 def index():
     return render_template_string(html_code)
 
+@app.route('/query', methods=['GET', 'POST'])
+def generic_query():
+    if request.method == 'POST':
+        query = request.form['query']
+        results = execute_query(query)
+        return render_template_string(html_code, query=query, results=results)
+    return render_template_string(html_code, query=None, results=None)
+
+
 @app.route('/search', methods=['POST'])
 def search():
     query = request.form['query']
+    results = execute_query(query)
+    return render_template_string(html_code, query=query, results=results)
+
+@app.route('/flights/departing/<airport>', methods=['GET'])
+def get_flights_departing_from(airport):
+    query = f"MATCH (n) WHERE n.departure_airport = '{airport}' RETURN n"
+    results = execute_query(query)
+    return render_template_string(html_code, query=query, results=results)
+
+@app.route('/flights/arriving/<airport>', methods=['GET'])
+def get_flights_arriving_at(airport):
+    query = f"MATCH (n) WHERE n.arrival_airport = '{airport}' RETURN n"
+    results = execute_query(query)
+    return render_template_string(html_code, query=query, results=results)
+
+@app.route('/flights/status/<status>', methods=['GET'])
+def get_flights_by_status(status):
+    query = f"MATCH (n) WHERE n.status = '{status}' RETURN n"
+    results = execute_query(query)
+    return render_template_string(html_code, query=query, results=results)
+
+@app.route('/flights/age/<int:age>', methods=['GET'])
+def get_flights_by_age(age):
+    query = f"MATCH (n) WHERE n.plane_age = {age} RETURN n"
+    results = execute_query(query)
+    return render_template_string(html_code, query=query, results=results)
+
+@app.route('/flights/airline/<airline_name>', methods=['GET'])
+def get_flights_by_airline(airline_name):
+    query = f"MATCH (n) WHERE n.airline = '{airline_name}' RETURN n"
+    results = execute_query(query)
+    return render_template_string(html_code, query=query, results=results)
+
+@app.route('/flights/model/<plane_model>', methods=['GET'])
+def get_flights_by_model(plane_model):
+    query = f"MATCH (n) WHERE n.model_code = '{plane_model}' RETURN n"
     results = execute_query(query)
     return render_template_string(html_code, query=query, results=results)
 
@@ -147,22 +180,25 @@ def execute_query(query):
         results = session.run(query)
         flights = []
         for record in results:
-            flight = {
-                "flight_number": record['n']['flight_number'],
-                "date": record['n']['date'],
-                "time": record['n']['time'],
-                "status": record['n']['status'],
-                "production_line": record['n']['production_line'],
-                "registration_number": record['n']['registration_number'],
-                "departure_airport": record['n']['departure_airport'],
-                "arrival_airport": record['n']['arrival_airport'],
-                "airline": record['n']['airline'],
-                "model_code": record['n']['model_code'],
-                "first_flight_date": record['n']['first_flight_date'],
-                "plane_owner": record['n']['plane_owner'],
-                "plane_age": record['n']['plane_age']
-            }
-            flights.append(flight)
+            flight_number = record['n']['flight_number']
+            
+            if flight_number:  # filter out None or empty flight numbers
+                flight = {
+                    "flight_number": flight_number,
+                    "date": record['n']['date'],
+                    "time": record['n']['time'],
+                    "status": record['n']['status'],
+                    "production_line": record['n']['production_line'],
+                    "registration_number": record['n']['registration_number'],
+                    "departure_airport": record['n']['departure_airport'],
+                    "arrival_airport": record['n']['arrival_airport'],
+                    "airline": record['n']['airline'],
+                    "model_code": record['n']['model_code'],
+                    "first_flight_date": record['n']['first_flight_date'],
+                    "plane_owner": record['n']['plane_owner'],
+                    "plane_age": record['n']['plane_age']
+                }
+                flights.append(flight)
         return flights
 
 if __name__ == "__main__":
